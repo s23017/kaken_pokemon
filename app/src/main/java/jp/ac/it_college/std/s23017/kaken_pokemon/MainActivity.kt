@@ -11,7 +11,9 @@ import retrofit2.Response
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import jp.ac.it_college.std.s23017.kaken_pokemon.model.Pokemon
+import jp.ac.it_college.std.s23017.kaken_pokemon.model.TypePokemonList
 import jp.ac.it_college.std.s23017.kaken_pokemon.model.TypeRelationMap
+import jp.ac.it_college.std.s23017.kaken_pokemon.model.TypeRelations
 import java.io.InputStreamReader
 
 class MainActivity : AppCompatActivity() {
@@ -83,7 +85,10 @@ class MainActivity : AppCompatActivity() {
         val call = apiService.getPokemonSpecies(pokemonId)
 
         call.enqueue(object : Callback<PokemonSpecies> {
-            override fun onResponse(call: Call<PokemonSpecies>, response: Response<PokemonSpecies>) {
+            override fun onResponse(
+                call: Call<PokemonSpecies>,
+                response: Response<PokemonSpecies>
+            ) {
                 if (response.isSuccessful) {
                     val species = response.body()
                     // 日本語名をコールバックで返す
@@ -139,9 +144,67 @@ class MainActivity : AppCompatActivity() {
         // 有利なタイプが存在する場合
         if (advantageousTypes.isNotEmpty()) {
             textView.append("\n対戦相手のポケモンに有利なタイプ: ${advantageousTypes.joinToString(", ")}")
+
+            advantageousTypes.forEach { type ->
+                fetchPokemonsForType(type)
+            }
         } else {
             textView.append("\n有利なタイプが見つかりませんでした。")
         }
+    }
+
+
+    private fun fetchPokemonsForType(type: String) {
+        val apiService = RetrofitInstance.apiService
+        val call = apiService.getPokemonByType(type)
+
+        call.enqueue(object : Callback<TypePokemonList> {
+            override fun onResponse(call: Call<TypePokemonList>, response: Response<TypePokemonList>) {
+                if (response.isSuccessful) {
+                    val pokemons = response.body()?.pokemon
+                    pokemons?.let { pokemonList ->
+                        // ポケモン名のリストを取得
+                        val pokemonNames = pokemonList.joinToString { entry ->
+                            entry.pokemon?.let { pokemonSpecies ->
+                                // PokemonSpeciesから日本語名を取得
+                                pokemonSpecies.names.find { it.language.name == "ja" }?.name ?: "不明"
+                            } ?: "不明" // entry.pokemonがnullの場合
+                        }
+
+                        // 日本語名をマッピング
+                        val typeNameMap = mapOf(
+                            "normal" to "ノーマル",
+                            "fighting" to "かくとう",
+                            "flying" to "ひこう",
+                            "poison" to "どく",
+                            "ground" to "じめん",
+                            "rock" to "いわ",
+                            "bug" to "むし",
+                            "ghost" to "ゴースト",
+                            "steel" to "はがね",
+                            "fire" to "ほのお",
+                            "water" to "みず",
+                            "electric" to "でんき",
+                            "psychic" to "エスパー",
+                            "ice" to "こおり",
+                            "dragon" to "ドラゴン",
+                            "fairy" to "フェアリー",
+                            "dark" to "あく"
+                            // 他のタイプも追加
+                        )
+
+                        val japaneseType = typeNameMap[type] ?: type // 日本語名が見つからなかった場合はそのままのタイプを使う
+
+                        // TextViewにポケモン名を表示
+                        textView.append("\n$japaneseType タイプのポケモン: $pokemonNames")
+                    }
+                }
+            }
+
+            override fun onFailure(call: Call<TypePokemonList>, t: Throwable) {
+                textView.append("\nエラーが発生しました: ${t.message}")
+            }
+        })
     }
 
 }

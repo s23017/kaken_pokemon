@@ -12,3 +12,10 @@ data class PokemonName(
 data class PokemonLanguage(
     val name: String
 )
+data class TypePokemonList(
+    val pokemon: List<PokemonEntry>
+)
+
+data class PokemonEntry(
+    val pokemon: PokemonSpecies // ここでPokemonSpeciesの型を使う
+)
