@@ -3,6 +3,7 @@ package jp.ac.it_college.std.s23017.kaken_pokemon
 import jp.ac.it_college.std.s23017.kaken_pokemon.model.PokemonSpecies
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
+import android.widget.Button
 import android.widget.TextView
 import retrofit2.Call
 import retrofit2.Callback
@@ -16,6 +17,7 @@ import java.io.InputStreamReader
 class MainActivity : AppCompatActivity() {
 
     private lateinit var textView: TextView
+    private lateinit var reloadButton: Button
     private lateinit var typeRelations: TypeRelationMap
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -24,11 +26,22 @@ class MainActivity : AppCompatActivity() {
 
         // TextViewの参照を取得
         textView = findViewById(R.id.textView)
+        reloadButton = findViewById(R.id.reloadButton)
 
         // タイプ相性のデータを読み込む
         typeRelations = loadTypeRelationsFromAssets()
 
         // ランダムなポケモンIDを設定 (例: 1 ~ 100 の範囲)
+        val randomPokemonId = (1..100).random()
+        fetchPokemonDetails(randomPokemonId)
+
+        // リロードボタンのクリックリスナーを設定
+        reloadButton.setOnClickListener {
+            loadRandomPokemon()
+        }
+    }
+
+    private fun loadRandomPokemon() {
         val randomPokemonId = (1..100).random()
         fetchPokemonDetails(randomPokemonId)
     }
