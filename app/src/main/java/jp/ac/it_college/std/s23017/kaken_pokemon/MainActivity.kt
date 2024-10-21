@@ -1,108 +1,151 @@
 package jp.ac.it_college.std.s23017.kaken_pokemon
 
+import jp.ac.it_college.std.s23017.kaken_pokemon.model.PokemonSpecies
+import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.widget.TextView
-import androidx.activity.ComponentActivity
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
-import kotlin.random.Random
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
+import jp.ac.it_college.std.s23017.kaken_pokemon.model.Pokemon
+import jp.ac.it_college.std.s23017.kaken_pokemon.model.PokemonType
+import jp.ac.it_college.std.s23017.kaken_pokemon.model.PokemonTypeWrapper
+import jp.ac.it_college.std.s23017.kaken_pokemon.model.TypeRelationMap
+import jp.ac.it_college.std.s23017.kaken_pokemon.model.TypeRelations
+import java.io.InputStreamReader
 
-class MainActivity : ComponentActivity() {
+class MainActivity : AppCompatActivity() {
 
     private lateinit var textView: TextView
+    private lateinit var typeRelations: TypeRelationMap
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        // TextViewの参照を取得
         textView = findViewById(R.id.textView)
 
-        // ランダムなポケモンIDを生成
-        val randomPokemonId = Random.nextInt(1, 152) // 1から151の間のランダムな数を生成
+        // タイプ相性のデータを読み込む
+        typeRelations = loadTypeRelationsFromAssets()
 
-        // APIを呼び出してポケモンデータを取得
+        // ランダムなポケモンIDを設定 (例: 1 ~ 100 の範囲)
+        val randomPokemonId = (1..100).random()
         fetchPokemonDetails(randomPokemonId)
     }
 
+    // ポケモンの詳細情報を取得する関数
     private fun fetchPokemonDetails(pokemonId: Int) {
-        // まずポケモンの基本情報を取得
-        RetrofitInstance.api.getPokemonById(pokemonId).enqueue(object : Callback<Pokemon> {
+        val apiService = RetrofitInstance.apiService
+        val call = apiService.getPokemonDetails(pokemonId)
+
+        call.enqueue(object : Callback<Pokemon> {
             override fun onResponse(call: Call<Pokemon>, response: Response<Pokemon>) {
                 if (response.isSuccessful) {
                     val pokemon = response.body()
-//                    // 英語の名前とタイプを一旦表示
-//                    textView.text = "ポケモン名: ${pokemon?.name}\nタイプ: ${pokemon?.types?.joinToString { it.type.name }}"
+                    val pokemonType = pokemon?.types?.firstOrNull()?.type?.name // ポケモンの最初のタイプを取得
+                    textView.text = "ポケモン名: ${pokemon?.name}\nタイプ: ${pokemon?.types?.joinToString { it.type.name }}"
+
+                    // 有利なポケモンの提案
+                    pokemonType?.let { suggestStrongPokemon(it) }
 
                     // ポケモンの種別情報を取得して日本語名を表示
                     fetchPokemonSpecies(pokemonId)
-
-                    // 各タイプの日本語を取得して表示
-                    pokemon?.let {
-                        fetchPokemonTypeInJapanese(it.types)
-                    }
-
-                } else {
-                    textView.text = "エラー: ${response.code()}"
                 }
             }
 
             override fun onFailure(call: Call<Pokemon>, t: Throwable) {
-                textView.text = "失敗: ${t.message}"
+                textView.text = "エラーが発生しました: ${t.message}"
             }
         })
     }
 
-    // ポケモンの種別情報から日本語名を取得する
+    // ポケモンの種別情報 (日本語名など) を取得する関数
     private fun fetchPokemonSpecies(pokemonId: Int) {
-        RetrofitInstance.api.getPokemonSpecies(pokemonId.toString()).enqueue(object : Callback<PokemonSpeciesResponse> {
-            override fun onResponse(call: Call<PokemonSpeciesResponse>, response: Response<PokemonSpeciesResponse>) {
+        val apiService = RetrofitInstance.apiService
+        val call = apiService.getPokemonSpecies(pokemonId)
+
+        call.enqueue(object : Callback<PokemonSpecies> {
+            override fun onResponse(call: Call<PokemonSpecies>, response: Response<PokemonSpecies>) {
                 if (response.isSuccessful) {
                     val species = response.body()
-                    species?.let {
-                        // 日本語の名前を取得
-                        val japaneseName = it.names.find { nameInfo ->
-                            nameInfo.language.name == "ja-Hrkt"
-                        }?.name
-
-                        // 画面に日本語名を表示
-                        textView.text = "${textView.text}\n日本語名: $japaneseName"
-                    }
-                } else {
-                    textView.text = "種別データの取得に失敗しました"
+                    // 日本語名をTextViewに表示
+                    textView.append("\n日本語名: ${species?.names?.find { it.language.name == "ja" }?.name}")
                 }
             }
 
-            override fun onFailure(call: Call<PokemonSpeciesResponse>, t: Throwable) {
-                textView.text = "種別データの取得に失敗: ${t.message}"
+            override fun onFailure(call: Call<PokemonSpecies>, t: Throwable) {
+                textView.text = "エラーが発生しました: ${t.message}"
             }
         })
     }
 
-    // タイプ情報を日本語で取得して表示する
-    private fun fetchPokemonTypeInJapanese(types: List<Type>) {
-        types.forEach { type ->
-            // 各タイプの詳細情報を取得する（タイプ名を日本語に変換）
-            RetrofitInstance.api.getTypeInfo(type.type.name).enqueue(object : Callback<TypeResponse> {
-                override fun onResponse(call: Call<TypeResponse>, response: Response<TypeResponse>) {
-                    if (response.isSuccessful) {
-                        val typeResponse = response.body()
-                        typeResponse?.let {
-                            // 日本語のタイプ名を取得
-                            val japaneseTypeName = it.names.find { nameInfo ->
-                                nameInfo.language.name == "ja-Hrkt"
-                            }?.name
+    // ポケモンのタイプを日本語で取得して表示する関数
+    private fun fetchPokemonTypeInJapanese(types: List<PokemonTypeWrapper>) {
+        types.forEach { typeWrapper ->
+            val apiService = RetrofitInstance.apiService
+            val call = apiService.getPokemonTypeDetails(typeWrapper.type.name)
 
-                            // 日本語のタイプ名を表示
-                            textView.text = "${textView.text}\nタイプ: $japaneseTypeName"
-                        }
+            call.enqueue(object : Callback<PokemonType> {
+                override fun onResponse(call: Call<PokemonType>, response: Response<PokemonType>) {
+                    if (response.isSuccessful) {
+                        val type = response.body()
+                        // 日本語のタイプ名をTextViewに表示
+                        textView.append("\nタイプ（日本語）: ${type?.names?.find { it.language.name == "ja" }?.name}")
                     }
                 }
 
-                override fun onFailure(call: Call<TypeResponse>, t: Throwable) {
-                    textView.text = "${textView.text}\nタイプ情報の取得に失敗: ${t.message}"
+                override fun onFailure(call: Call<PokemonType>, t: Throwable) {
+                    textView.append("\nエラー: ${t.message}")
                 }
             })
         }
     }
+
+    // タイプ相性データを読み込む関数
+    private fun loadTypeRelationsFromAssets(): TypeRelationMap {
+        val assetManager = assets
+        val inputStream = assetManager.open("type_relations.json")
+        val reader = InputStreamReader(inputStream)
+        val gson = Gson()
+        val type = object : TypeToken<TypeRelationMap>() {}.type
+        return gson.fromJson(reader, type)
+    }
+
+    // 相手のポケモンに有利なポケモンを提案する関数
+    private fun suggestStrongPokemon(opponentType: String) {
+        // opponentTypeに対して有利なタイプを取得
+        val advantageousTypes = when (opponentType) {
+            "normal" -> typeRelations.normal.weaknesses
+            "fighting" -> typeRelations.fighting.weaknesses
+            "flying" -> typeRelations.flying.weaknesses
+            "poison" -> typeRelations.poison.weaknesses
+            "ground" -> typeRelations.ground.weaknesses
+            "rock" -> typeRelations.rock.weaknesses
+            "bug" -> typeRelations.bug.weaknesses
+            "ghost" -> typeRelations.ghost.weaknesses
+            "steel" -> typeRelations.steel.weaknesses
+            "fire" -> typeRelations.fire.weaknesses
+            "water" -> typeRelations.water.weaknesses
+            "grass" -> typeRelations.grass.weaknesses
+            "electric" -> typeRelations.electric.weaknesses
+            "psychic" -> typeRelations.psychic.weaknesses
+            "ice" -> typeRelations.ice.weaknesses
+            "dragon" -> typeRelations.dragon.weaknesses
+            "fairy" -> typeRelations.fairy.weaknesses
+            "dark" -> typeRelations.dark.weaknesses
+            // ここに他のタイプを追加する
+            else -> emptyList()
+        }
+
+        // 有利なタイプが存在する場合
+        if (advantageousTypes.isNotEmpty()) {
+            textView.append("\n対戦相手のポケモンに有利なタイプ: ${advantageousTypes.joinToString(", ")}")
+        } else {
+            textView.append("\n有利なタイプが見つかりませんでした。")
+        }
+    }
+
 }
