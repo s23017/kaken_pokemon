@@ -10,10 +10,7 @@ import retrofit2.Response
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import jp.ac.it_college.std.s23017.kaken_pokemon.model.Pokemon
-import jp.ac.it_college.std.s23017.kaken_pokemon.model.PokemonType
-import jp.ac.it_college.std.s23017.kaken_pokemon.model.PokemonTypeWrapper
 import jp.ac.it_college.std.s23017.kaken_pokemon.model.TypeRelationMap
-import jp.ac.it_college.std.s23017.kaken_pokemon.model.TypeRelations
 import java.io.InputStreamReader
 
 class MainActivity : AppCompatActivity() {
@@ -46,13 +43,18 @@ class MainActivity : AppCompatActivity() {
                 if (response.isSuccessful) {
                     val pokemon = response.body()
                     val pokemonType = pokemon?.types?.firstOrNull()?.type?.name // ポケモンの最初のタイプを取得
-                    textView.text = "ポケモン名: ${pokemon?.name}\nタイプ: ${pokemon?.types?.joinToString { it.type.name }}"
 
-                    // 有利なポケモンの提案
-                    pokemonType?.let { suggestStrongPokemon(it) }
+                    // ポケモンの名前を日本語で取得
+                    fetchPokemonSpecies(pokemonId) { speciesName ->
+                        // TextViewにポケモンの名前を設定
+                        textView.text = "ポケモン名: $speciesName\n"
 
-                    // ポケモンの種別情報を取得して日本語名を表示
-                    fetchPokemonSpecies(pokemonId)
+                        // タイプを日本語で表示
+                        textView.append("タイプ: ${pokemon?.types?.joinToString { it.type.name }}\n")
+
+                        // 有利なポケモンの提案
+                        pokemonType?.let { suggestStrongPokemon(it) }
+                    }
                 }
             }
 
@@ -62,8 +64,8 @@ class MainActivity : AppCompatActivity() {
         })
     }
 
-    // ポケモンの種別情報 (日本語名など) を取得する関数
-    private fun fetchPokemonSpecies(pokemonId: Int) {
+    // ポケモンの種別情報を取得して日本語名を表示する関数
+    private fun fetchPokemonSpecies(pokemonId: Int, callback: (String?) -> Unit) {
         val apiService = RetrofitInstance.apiService
         val call = apiService.getPokemonSpecies(pokemonId)
 
@@ -71,37 +73,18 @@ class MainActivity : AppCompatActivity() {
             override fun onResponse(call: Call<PokemonSpecies>, response: Response<PokemonSpecies>) {
                 if (response.isSuccessful) {
                     val species = response.body()
-                    // 日本語名をTextViewに表示
-                    textView.append("\n日本語名: ${species?.names?.find { it.language.name == "ja" }?.name}")
+                    // 日本語名をコールバックで返す
+                    callback(species?.names?.find { it.language.name == "ja" }?.name)
+                } else {
+                    callback(null)
                 }
             }
 
             override fun onFailure(call: Call<PokemonSpecies>, t: Throwable) {
                 textView.text = "エラーが発生しました: ${t.message}"
+                callback(null)
             }
         })
-    }
-
-    // ポケモンのタイプを日本語で取得して表示する関数
-    private fun fetchPokemonTypeInJapanese(types: List<PokemonTypeWrapper>) {
-        types.forEach { typeWrapper ->
-            val apiService = RetrofitInstance.apiService
-            val call = apiService.getPokemonTypeDetails(typeWrapper.type.name)
-
-            call.enqueue(object : Callback<PokemonType> {
-                override fun onResponse(call: Call<PokemonType>, response: Response<PokemonType>) {
-                    if (response.isSuccessful) {
-                        val type = response.body()
-                        // 日本語のタイプ名をTextViewに表示
-                        textView.append("\nタイプ（日本語）: ${type?.names?.find { it.language.name == "ja" }?.name}")
-                    }
-                }
-
-                override fun onFailure(call: Call<PokemonType>, t: Throwable) {
-                    textView.append("\nエラー: ${t.message}")
-                }
-            })
-        }
     }
 
     // タイプ相性データを読み込む関数
